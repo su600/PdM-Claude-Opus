@@ -1,11 +1,13 @@
 # PdM 智能运维平台 — 完整复刻文档
 
-> **生成时间**：2026-03-27  
-> **使用 Agent 模型**：GitHub Copilot（Claude Opus 4.6）— VS Code Copilot Chat Agent 模式  
-> **工作方式**：在 VS Code 中通过 Copilot Chat 以多轮对话方式，逐步构建整个项目。Copilot 直接在编辑器中创建/编辑文件、运行终端命令、调试错误、自动修复。  
+> **生成时间**：2026-04-01（最近更新）
+> **使用 Agent 模型**：Claude Sonnet 4.6 / Claude Code（VS Code）
+> **工作方式**：通过 Claude Code 以多轮对话方式，逐步构建并迭代整个项目。Agent 直接在编辑器中创建/编辑文件、运行终端命令、调试错误、自动修复。
 > **项目定位**：工业设备预测性维护（Predictive Maintenance）平台，覆盖机加、复材铺丝、激光焊接、检验监测等场景。
-# **核心功能**：多算法预测（参数可配置）与阈值治理、算法内部参数配置、模板管理与套用、通知事件推送与重试、TDengine 遥测数据采集与趋势查询、Dashboard KPI 动态计算、系统健康状态显示。
-注：UI设计用GPT5.4更新了一版用力过猛，又简化回来了，最终版本在前端实现细节里有说明。-Su
+> **核心功能**：多算法预测（基于真实运行数据）+ 完整设备台账 + 维保记录 + SQLite 全持久化 + 系统管理页面。
+
+注：UI 设计经历了"用力过猛又简化回来"的循环，最终版以简洁实用为主，微动效不过度。-Su
+
 ---
 
 ## 一、技术栈总览
@@ -14,6 +16,7 @@
 |------|------|------|
 | **后端框架** | Python + FastAPI | Python 3.11 / FastAPI 0.115.x |
 | **认证** | python-jose (JWT HS256) + bcrypt | python-jose 3.x / bcrypt ≥4.0 |
+| **业务数据库** | SQLite（`sqlite3` 标准库，WAL 模式） | 内置，无需额外安装 |
 | **HTTP 客户端** | httpx | 0.28.x |
 | **配置管理** | pydantic-settings | 2.x |
 | **前端框架** | React + TypeScript + Vite | React 18.3 / Vite 6.x |
@@ -30,77 +33,81 @@
 ## 二、项目目录结构
 
 ```
-PdM-Claude/
-├── docker-compose.yml              # 三服务编排
-├── .env.example                     # 环境变量模板
+PdM-Claude-Opus/
+├── docker-compose.yml              # 三服务编排（含 pdm_data volume）
+├── .env.example                    # 环境变量模板
 ├── README.md
-├── replication-requirements.md      # 复刻需求总文档
-├── project-summary-by-opus46.md     # 本文档
+├── project-summary-by-opus46.md   # 本文档
 │
 ├── backend/
-│   ├── Dockerfile                   # Python 3.11-slim
-│   ├── .dockerignore                # 排除 __pycache__、.git 等
-│   ├── requirements.txt             # 9 个依赖
+│   ├── Dockerfile                  # Python 3.11-slim
+│   ├── .dockerignore
+│   ├── requirements.txt            # 9 个依赖（无 SQLite 额外依赖）
 │   └── app/
-│       ├── __init__.py
-│       ├── main.py                  # FastAPI 入口 + CORS + Lifespan + 启动自检
+│       ├── main.py                 # FastAPI 入口 + Lifespan + SQLite 初始化 + 种子数据
 │       ├── core/
-│       │   ├── __init__.py
-│       │   ├── config.py            # pydantic-settings 配置
-│       │   └── security.py          # JWT 签发/验证 + bcrypt 密码哈希
+│       │   ├── config.py           # pydantic-settings 配置
+│       │   └── security.py         # JWT 签发/验证 + bcrypt 密码哈希
 │       ├── db/
-│       │   ├── __init__.py
-│       │   ├── models.py            # 全部 Pydantic 模型（20+ 个）
-│       │   └── store.py             # 内存数据库 + 种子数据（动态读取 settings）
+│       │   ├── database.py         # SQLite 连接管理 + WAL + DDL（12 张表）
+│       │   ├── models.py           # 全部 Pydantic 模型（25+ 个）
+│       │   └── store.py            # SQLite CRUD 函数集（替代原内存字典）
 │       ├── routers/
-│       │   ├── __init__.py
-│       │   ├── auth.py              # 登录 + JWT 依赖 + RBAC
-│       │   ├── users.py             # 用户管理
-│       │   ├── devices.py           # 设备管理
-│       │   ├── alerts.py            # 告警管理
-│       │   ├── rules.py             # 规则中心
-│       │   ├── predictions.py       # 预测接口
-│       │   ├── governance.py        # 算法治理（模板/评估/审计）
-│       │   ├── datasources.py       # 数据源 CRUD + 连接测试
-│       │   ├── telemetry.py         # 遥测采集与查询
-│       │   ├── notifications.py     # 通知推送 + 重试
-│       │   └── health.py            # 健康检查
+│       │   ├── auth.py             # 登录 + JWT 依赖 + RBAC
+│       │   ├── users.py            # 用户管理
+│       │   ├── devices.py          # 设备管理（10 个端点，含维保/告警/预测）
+│       │   ├── alerts.py           # 告警管理
+│       │   ├── rules.py            # 规则中心
+│       │   ├── predictions.py      # 预测接口 + 算法列表 + 源码查看
+│       │   ├── governance.py       # 算法治理（模板/评估/审计）
+│       │   ├── datasources.py      # 数据源 CRUD + 连接测试
+│       │   ├── telemetry.py        # 运行数据采集与查询
+│       │   ├── notifications.py    # 通知推送 + 重试
+│       │   ├── system.py           # 系统信息 + 系统设置
+│       │   └── health.py           # 健康检查
 │       └── services/
-│           ├── __init__.py
-│           ├── prediction_svc.py    # 多算法加权融合
-│           ├── tdengine_svc.py      # TDengine REST SQL 封装
-│           └── notification_svc.py  # Webhook HMAC 签名 + 重试
+│           ├── prediction_svc.py   # 多算法加权融合（基于真实运行数据）
+│           ├── tdengine_svc.py     # TDengine REST SQL 封装
+│           ├── notification_svc.py # Webhook HMAC 签名 + 重试
+│           └── algorithms/
+│               ├── base.py         # 公共工具函数（clamp、telemetry_to_matrix 等）
+│               ├── rule_based.py   # 阈值评估 + 告警历史衰减计分
+│               ├── statistical.py  # Z-score 异常检测 + OLS 趋势分析
+│               ├── isolation_forest.py  # 隔离森林异常检测（纯 numpy 实现）
+│               └── time_series.py  # Holt 双指数平滑时序预测
 │
 ├── frontend/
-│   ├── Dockerfile                   # 二阶段构建 (Node build → Nginx)
-│   ├── .dockerignore                # 排除 node_modules、dist 等
-│   ├── nginx.conf                   # SPA fallback + 静态缓存
-│   ├── package.json                 # 依赖清单
+│   ├── Dockerfile                  # 二阶段构建（Node build → Nginx）
+│   ├── .dockerignore
+│   ├── nginx.conf                  # SPA fallback + 静态缓存
+│   ├── package.json
 │   ├── tsconfig.json
-│   ├── vite.config.ts               # 代理 /api → backend:8000
+│   ├── vite.config.ts              # 代理 /api → backend:8000
 │   ├── index.html
 │   └── src/
-│       ├── main.tsx                 # React 入口 (HashRouter + ThemeProvider)
-│       ├── App.tsx                  # 主框架 Shell + 路由 + 抽屉
-│       ├── api.ts                   # axios 实例 + 拦截器
-│       ├── styles.css               # 全局主题变量 + Ant Design 覆盖
-│       ├── ThemeContext.tsx          # 亮/暗主题切换
-│       ├── vite-env.d.ts
+│       ├── main.tsx                # React 入口（HashRouter + ThemeProvider）
+│       ├── App.tsx                 # 主框架 Shell + 路由 + 状态 + 抽屉
+│       ├── api.ts                  # axios 实例 + 拦截器
+│       ├── styles.css              # 全局主题变量 + Ant Design 覆盖
+│       ├── ThemeContext.tsx         # 亮/暗主题切换
 │       ├── components/
-│       │   └── CommandPalette.tsx    # Ctrl+K 全局快捷导航
+│       │   └── CommandPalette.tsx  # Ctrl+K 全局快捷导航
 │       ├── pages/
-│       │   ├── LoginPage.tsx        # 品牌化登录
-│       │   ├── DashboardPage.tsx    # 运行总览
-│       │   ├── PredictionPage.tsx   # 预测中心
+│       │   ├── LoginPage.tsx       # 品牌化登录（粒子动效 + 渐入动画）
+│       │   ├── DashboardPage.tsx   # 运行总览（KPI 动态计算 + 运行趋势）
+│       │   ├── DeviceManagementPage.tsx  # 设备台账管理（新建/编辑/删除）
+│       │   ├── DeviceDetailPage.tsx      # 设备详情（5 Tab 聚合视图）
+│       │   ├── PredictionPage.tsx   # 预测中心（含算法参数配置面板）
 │       │   ├── RulesPage.tsx        # 规则中心
-│       │   ├── GovernancePage.tsx   # 算法治理
-│       │   ├── NotificationsPage.tsx # 通知中心
-│       │   └── DataSourcePage.tsx   # 数据源配置
+│       │   ├── GovernancePage.tsx   # 算法治理（模板/评估/审计）
+│       │   ├── NotificationsPage.tsx    # 通知中心
+│       │   ├── DataSourcePage.tsx   # 数据源配置
+│       │   └── SystemManagementPage.tsx  # 系统管理（版本/TDengine/通知配置）
 │       └── types/
-│           └── index.ts             # TypeScript 领域类型 + 统一中文标签常量
+│           └── index.ts            # TypeScript 领域类型 + 统一中文标签常量
 │
 └── docs/
-    └── notification-contract.md     # 通知推送协议文档
+    └── notification-contract.md   # 通知推送协议文档
 ```
 
 ---
@@ -135,6 +142,8 @@ services:
     env_file: [.env]
     environment:
       - TDENGINE_HOST=tdengine
+    volumes:
+      - pdm_data:/app/data    # ⚠️ SQLite 持久化挂载点
     depends_on:
       tdengine: { condition: service_healthy }
     restart: unless-stopped
@@ -149,6 +158,7 @@ services:
 
 volumes:
   tdengine_data:
+  pdm_data:       # ← 业务数据库持久化 volume
 ```
 
 ---
@@ -164,19 +174,27 @@ volumes:
 | `GET` | `/users` | 用户列表 | 已登录 |
 | `POST` | `/users` | 创建用户 | admin |
 
-### 4.2 设备与告警
+### 4.2 设备与维保
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| `GET` | `/devices` | 设备列表 |
+| `GET` | `/devices` | 设备列表（含扩展台账字段） |
 | `POST` | `/devices` | 创建设备 |
+| `GET` | `/devices/{id}` | 单设备详情 |
+| `PUT` | `/devices/{id}` | 更新设备信息 |
+| `DELETE` | `/devices/{id}` | 删除设备（级联删除维保记录） |
+| `GET` | `/devices/{id}/maintenance` | 该设备维保记录列表 |
+| `POST` | `/devices/{id}/maintenance` | 新增维保记录 |
+| `DELETE` | `/devices/{id}/maintenance/{record_id}` | 删除维保记录 |
+| `GET` | `/devices/{id}/alerts` | 该设备告警历史 |
+| `GET` | `/devices/{id}/predictions` | 该设备预测历史 |
+
+### 4.3 告警与规则
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
 | `GET` | `/alerts` | 告警列表 |
 | `POST` | `/alerts` | 创建告警 |
-
-### 4.3 规则中心
-
-| 方法 | 路径 | 描述 |
-|------|------|------|
 | `GET` | `/rules` | 规则列表 |
 | `POST` | `/rules` | 创建规则 |
 | `POST` | `/rules/{rule_id}/toggle` | 启停切换 |
@@ -185,22 +203,26 @@ volumes:
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| `POST` | `/predictions/infer` | 运行预测（多算法加权融合，支持自定义算法参数） |
-| `GET` | `/predictions/stats` | 预测统计（总次数 + 平均风险分） |
+| `POST` | `/predictions/infer` | 运行预测（多算法加权融合 + 自定义参数） |
+| `GET` | `/predictions/stats` | 预测统计（总次数 + 平均风险分，单 SQL） |
+| `GET` | `/predictions/algorithms` | 算法描述列表（名称/文件/说明） |
+| `GET` | `/predictions/algorithms/{algo_key}/source` | 查看算法源码（PlainText） |
 
-请求体新增字段 `algo_params`（可选），结构：
+`/predictions/infer` 请求体中 `algo_params` 字段（可选）：
 ```json
 {
   "algo_params": {
-    "rule_based": { "alert_weight": 0.25, "base_rul": 500, ... },
-    "statistical": { "risk_mean": 0.35, "risk_std": 0.15, ... },
-    "ml": { "risk_mean": 0.40, "risk_std": 0.18, ... },
-    "deep_learning": { "risk_mean": 0.38, "risk_std": 0.20, ... }
+    "rule_based": {
+      "temp_threshold": 85, "vibration_threshold": 12,
+      "pressure_low": 1.5, "rpm_threshold": 5000,
+      "alert_decay": 0.3, "base_rul": 500
+    },
+    "statistical": { "zscore_threshold": 2.0, "trend_weight": 0.3 },
+    "ml": { "contamination": 0.1 },
+    "deep_learning": { "alpha": 0.3, "beta": 0.1, "forecast_steps": 5 }
   }
 }
 ```
-
-返回结构：`risk_score`, `rul_hours`, `confidence`, `recommendation`, `risk_level`, `algorithm_outputs[]`
 
 ### 4.5 算法治理
 
@@ -216,22 +238,30 @@ volumes:
 | `POST` | `/algo-governance/evaluations` | 创建评估记录 |
 | `GET` | `/algo-governance/audit-logs` | 审计日志 |
 
-### 4.6 遥测
+### 4.6 运行数据（TDengine）
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| `POST` | `/telemetry/ingest` | 写入遥测点 (→ TDengine) |
-| `GET` | `/telemetry/{device_id}` | 查询设备遥测 |
+| `POST` | `/telemetry/ingest` | 写入运行数据点（→ TDengine） |
+| `GET` | `/telemetry/{device_id}` | 查询设备运行数据 |
 
 ### 4.7 通知
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| `POST` | `/notifications/push` | 推送通知（HMAC 签名 + 重试） |
-| `GET` | `/notifications/events` | 事件列表 |
+| `POST` | `/notifications/push` | 推送通知（HMAC 签名 + 自动重试） |
+| `GET` | `/notifications/events` | 事件列表（最新优先） |
 | `POST` | `/notifications/retry-failed` | 手动重试失败事件 |
 
-### 4.8 数据源
+### 4.8 系统管理
+
+| 方法 | 路径 | 描述 | 权限 |
+|------|------|------|------|
+| `GET` | `/system/info` | 系统信息（版本/TDengine 状态/服务器时间） | 已登录 |
+| `GET` | `/system/settings` | 系统设置（Webhook URL/重试次数） | 已登录 |
+| `PUT` | `/system/settings` | 更新系统设置 | admin |
+
+### 4.9 数据源
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
@@ -240,10 +270,10 @@ volumes:
 | `POST` | `/datasources` | 创建数据源 |
 | `PUT` | `/datasources/{id}` | 更新数据源 |
 | `DELETE` | `/datasources/{id}` | 删除数据源 |
-| `POST` | `/datasources/{id}/test` | 测试已有数据源连接 |
+| `POST` | `/datasources/{id}/test` | 测试已有数据源 |
 | `POST` | `/datasources/test-new` | 测试新配置（不保存） |
 
-### 4.9 健康检查
+### 4.10 健康检查
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
@@ -255,217 +285,219 @@ volumes:
 
 ### 5.1 配置 (config.py)
 - 使用 `pydantic-settings` 的 `BaseSettings`，支持 `.env` 文件加载
-- 关键配置项：`JWT_SECRET`, `WEBHOOK_SIGNING_SECRET`, TDengine 连接参数
 - CORS 允许 `localhost:5173/5174/5175`
 
 ### 5.2 认证与安全 (security.py)
 - 密码哈希：直接使用 `bcrypt` 库（**不用 passlib**，因为 passlib 与 bcrypt 5.x 不兼容）
 - JWT：`python-jose` HS256，默认 8 小时过期
-- 依赖注入：`get_current_user` 从 `HTTPBearer` 提取 token → 解码 → 查找用户
-- RBAC：`require_roles("admin", "engineer")` 工厂函数
+- 依赖注入：`get_current_user` → `require_roles("admin")` 工厂函数
 
-### 5.3 数据存储 (store.py)
-- **内存字典/列表**作为 demo 数据库（非持久化）
-- 启动时 `_seed()` 自动注入：
-  - 1 个管理员用户 (`admin` / `Admin@123`)
-  - 6 台演示设备（机加、铺丝、焊接、监测）
-  - 4 条演示告警
-  - 4 条演示规则
-  - 1 个默认数据源配置（**动态读取 `settings.TDENGINE_HOST/PORT` 等**，确保 Docker 环境与本地环境统一）
-  - 1 个默认算法模板（**含完整 algo_params 算法参数配置**）
+### 5.3 数据库层 (database.py)
 
-### 5.4 数据模型 (models.py)
-- **AlgorithmParams** 模型：定义四种算法的可配置内部参数
-  - `rule_based`：alert_weight, base_rul, rul_decay_per_alert, noise_min, noise_max, confidence_min, confidence_max
-  - `statistical / ml / deep_learning`：risk_mean, risk_std, rul_mean, rul_std, confidence_min, confidence_max
-- **PredictionRequest**：新增可选 `algo_params: Optional[AlgorithmParams]` 字段
-- **AlgoTemplate**：新增 `algo_params: Dict[str, Dict[str, float]]` 字段，模板可保存/导入导出完整参数
+SQLite，WAL 模式，存储位置：`/app/data/pdm.db`（挂载到 `pdm_data` Named Volume）。
 
-### 5.4 应用启动自检 (main.py lifespan)
-- **Lifespan** 启动流程：
-  1. 尝试初始化 TDengine 数据库（`init_database()`）
-  2. 调用 `check_health()` 探测 TDengine 连接状态
-  3. 遍历所有 `tdengine` 类型数据源，同步更新 `status` 字段（`"ok"` / `"error"`）和 `status_message`
-- 确保 `/health` 端点与数据源页面状态始终一致
+12 张表：`users`, `devices`, `alerts`, `rules`, `predictions`, `templates`, `evaluations`,
+`audit_logs`, `notification_events`, `datasources`, `maintenance_records`, `system_settings`
 
-### 5.5 预测服务 (prediction_svc.py)
-四种算法模拟器（**参数均可通过 API 自定义**）：
-1. **规则引擎** (`rule_based`)：基于告警数量推断风险，参数：alert_weight, base_rul, rul_decay_per_alert, noise_min/max, confidence_min/max
-2. **统计分析** (`statistical`)：高斯分布模拟，参数：risk_mean/std, rul_mean/std, confidence_min/max
-3. **机器学习** (`ml`)：随机森林+XGBoost 集成模拟，参数同上
-4. **深度学习** (`deep_learning`)：LSTM-Attention 模拟，参数同上
+`tx()` 上下文管理器：每次创建新连接，提交/回滚后关闭，天然并发安全：
+```python
+@contextmanager
+def tx():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+```
 
-所有算法函数签名为 `_xxx(device, params)`，从传入的 params dict 读取参数，未传时使用默认值。
+注意列名规避 SQL 关键字：
+- `rules` 表使用 `condition_expr`（替代 `condition`），读取时由 `_rule_row()` 重命名
+- `datasources` 表使用 `database_name`（替代 `database`），读写时由辅助函数映射
 
-融合逻辑：
-- 按用户配置的权重加权求和
-- 归一化权重 → 计算 risk_score / rul_hours / confidence
-- 基于阈值判定 risk_level (low/medium/high)
-- 生成维护建议 recommendation
-- 保留最近 200 条预测
+### 5.4 数据存储 (store.py)
+原内存字典/列表全部**替换为 SQLite CRUD 函数**，主要函数：
 
-### 5.5 TDengine 服务 (tdengine_svc.py)
-- REST SQL 接口（不依赖本地 `libtaos`）
-- Base64 Basic Auth 认证
-- `init_database()`：创建数据库 + 超级表 `telemetry`
+**设备：** `get_all_devices()`, `get_device(id)`, `create_device(data)`, `update_device(id, updates)`, `delete_device(id)`（级联删除 maintenance_records）
+
+**维保：** `get_maintenance_for_device(device_id)`, `create_maintenance_record(data)`, `get_maintenance_record(id)`, `delete_maintenance_record(id)`
+
+**告警：** `get_all_alerts()`, `get_alerts_for_device(device_id)`, `create_alert(data)`
+
+**预测：** `get_predictions_for_device(device_id)`, `append_prediction(data)`（事务内 trim 至 200 条）, `prediction_stats()`（单 SQL 返回 count + avg）
+
+**模板/治理：** `get_all_templates()`, `create_template(data)`, `update_template(id, updates)`, `delete_template(id)`; `get_all_evaluations()`, `create_evaluation(data)`; `append_audit_log(data)`
+
+**通知：** `get_all_notification_events()`, `create_notification_event(data)`, `update_notification_event(id, updates)`, `get_failed_notification_events()`
+
+**系统：** `get_system_settings()`, `update_system_settings(updates)`
+
+**种子数据：** `is_empty()`（检查 users 表行数） + `seed()`（6 台设备含完整台账、15 条维保记录、4 条告警、4 条规则、1 个模板、1 个数据源、系统默认设置）
+
+### 5.5 数据模型 (models.py)
+
+**设备相关（扩展）：**
+- `DeviceCreate` / `DeviceOut`：新增 `model`, `manufacturer`, `manufacture_year`, `serial_number`, `description`, `datasource_tag`
+- `DeviceUpdate`：所有字段可选，用于 PATCH 语义的 PUT 操作
+- `MaintenanceType` 枚举：preventive / corrective / predictive / inspection
+- `MaintenanceRecordCreate` / `MaintenanceRecordOut`
+
+**系统：**
+- `SystemInfo`：版本、构建日期、TDengine 连接信息、通知配置、服务器时间
+
+**预测：**
+- `AlgorithmParams`：四种算法各自的可配置内部参数字典
+- `PredictionRequest`：含可选 `algo_params: AlgorithmParams`
+- `AlgorithmOutput`：algorithm, risk_score, rul_hours, confidence, details
+
+### 5.6 应用启动自检 (main.py lifespan)
+1. `create_tables()` — 建表（幂等，IF NOT EXISTS）
+2. `store.is_empty()` → `store.seed()` — 首次运行播种数据
+3. `init_database()` — 初始化 TDengine 数据库与超级表
+4. `check_health()` — 探测 TDengine 连接
+5. 遍历 tdengine 类型数据源，同步 `status` 字段，确保页面与 /health 一致
+
+### 5.7 预测算法（真实运行数据驱动）
+
+四种算法均接收 `telemetry: list[dict]` 真实运行数据，函数签名 `run(device_id, telemetry, params) -> AlgorithmOutput`：
+
+1. **规则引擎** (`rule_based.py`)：取最近 10 条数据平均，计算各指标对阈值的超限比例；叠加历史告警指数衰减评分；直接使用 `store.get_alerts_for_device(device_id)` 查询 SQLite。
+
+2. **统计分析** (`statistical.py`)：Z-score 异常检测；可选最小二乘趋势推断；无数据则返回 NO_DATA 默认值。
+
+3. **隔离森林** (`isolation_forest.py`)：纯 numpy 实现，无 sklearn 依赖；随机超平面切分计算异常分数。
+
+4. **Holt 双指数平滑** (`time_series.py`)：level + trend 分解外推，预测未来数个时间步趋势，估算 RUL。
+
+融合逻辑（prediction_svc.py）：
+- 查询 TDengine 最近 500 条运行数据（`query_telemetry`）；无数据时各算法返回 NO_DATA 默认输出（不报错）
+- 按配置权重加权，归一化后计算 risk_score / rul_hours / confidence
+- 基于阈值判定 risk_level，生成中文建议
+- 事务内写入 SQLite 并 trim 至 200 条
+
+### 5.8 TDengine 服务 (tdengine_svc.py)
+- REST SQL（端口 6041），Base64 Basic Auth
+- `init_database()`：创建 pdm 数据库 + 超级表 `telemetry`
 - 超级表结构：`ts TIMESTAMP, temperature FLOAT, vibration FLOAT, pressure FLOAT, rpm FLOAT, TAGS(device_id BINARY(64))`
-- 子表自动创建：`t_{device_id}`
+- 子表自动创建：`t_{device_id}`（设备 ID 需清理特殊字符防注入）
 
-### 5.6 通知服务 (notification_svc.py)
-- HMAC-SHA256 签名（`WEBHOOK_SIGNING_SECRET` 为密钥）
-- Header: `X-PdM-Signature` + `X-PdM-Timestamp`
-- 超时 4 秒，重试 3 次（1s/2s/3s 回退）
-- 状态跟踪：pending → success / failed
+### 5.9 通知服务 (notification_svc.py)
+- HMAC-SHA256 签名：Header `X-PdM-Signature` + `X-PdM-Timestamp`
+- 超时 4 秒，最多 4 次尝试（重试间隔 1s / 2s / 3s）
+- 每次状态变更通过 `store.update_notification_event()` 持久化到 SQLite
 
 ---
 
 ## 六、前端完整实现细节
 
-### 6.1 入口与路由
-- `main.tsx`：`HashRouter` + `ThemeProvider` + `App`
-- `App.tsx`：
-  - 未登录 → 渲染 `LoginPage`
-  - 已登录 → 渲染 `AppShell`（含侧边栏 + 顶部栏 + 路由页面）
+### 6.1 入口与路由 (main.tsx + App.tsx)
+- `HashRouter` + `ThemeProvider` + `App`
+- 未登录 → `LoginPage`；已登录 → `AppShell`（Sider + Header + Routes）
 - 路由配置：
   - `/dashboard` — 运行总览
+  - `/devices` — 设备管理列表
+  - `/devices/:id` — 设备详情
   - `/prediction` — 预测中心
   - `/rules` — 规则中心
   - `/governance` — 算法治理
   - `/notifications` — 通知中心
   - `/datasources` — 数据源配置
+  - `/system` — 系统管理
   - `*` → `/dashboard`
 
 ### 6.2 主框架 Shell (App.tsx)
-- **左侧导航**：桌面端 Sider（可折叠）+ 移动端 Drawer
-- **顶部栏**：
-  - 设备数 Tag（点击展开设备抽屉）
-  - 高风险告警 Tag（点击展开告警抽屉）
-  - 亮/暗主题切换按钮
-  - 快捷导航按钮（打开 CommandPalette）
-  - 通知 Badge（未处理计数，点击展开通知抽屉）
-  - 用户头像 Tooltip
-  - 退出按钮
-- **共享状态管理**：
-  - `predictionConfig` 状态（algorithms, weights, thresholds, algoParams）在 AppShell 中维护
-  - PredictionPage 通过 `config` + `onConfigChange` props 双向绑定
-  - GovernancePage 通过 `currentConfig` + `onApplyTemplate` props 读取配置和套用模板
-  - 模板套用时自动转换权重（0-1 → 0-100）、阈值，合并 algo_params，并跳转预测页
-- **状态栏**：平台服务状态、TDengine 状态（正常/异常，用词统一）、当前角色、最近同步时间
-- **页脚**：版本号、运行状态标识（同时检查 service 和 tdengine 双状态）、环境标识
+- **侧边栏**：桌面端可折叠 Sider + 移动端 Drawer
+- **顶部栏**：设备 Tag、高风险告警 Tag、主题切换、快捷导航、通知 Badge、用户头像、退出
+- **共享状态**：`predictionConfig`（algorithms, weights, thresholds, algoParams）+ 模板套用联动
+- **状态栏**：平台服务状态、TDengine 状态（正常/异常）、当前角色、最近同步时间
 - **定时轮询**：每 30 秒刷新 users/me、devices、alerts、health、notifications
 
 ### 6.3 登录页 (LoginPage.tsx)
-- 品牌化深色登录卡片
-- 渐变 Logo + 标题 + 副标题
+- 品牌化深色登录卡片，渐变 Logo
+- `login-particles` 浮动背景粒子元素
+- `login-fadein-up` 渐入上升动画（各元素错开延迟）
+- `login-feature-icon` 颜色差异化特性图标
 - 默认填充 `admin / Admin@123`
-- 版本信息显示
-- `axios POST /auth/token` → token 存 `localStorage`
 
 ### 6.4 运行总览 (DashboardPage.tsx)
-- 4 个 KPI 卡片：在线设备、高风险告警、**平均风险分（从 `/predictions/stats` 动态获取）**、**最近预测次数（动态获取）**
-- 遥测趋势图（ECharts 折线图：温度/振动/压力）
-  - 有真实数据用真实数据，无数据时生成演示曲线
-  - 包含 dataZoom 滑动条
-- 最新告警表格（等级 Tag 分色，中文标签：低/中/高/危急）
+- 4 个 KPI 卡片：在线设备、高风险告警、**平均风险分（动态）**、**最近预测次数（动态）**
+- 运行趋势图（ECharts 折线图：温度/振动/压力）+ dataZoom 滑动条（无数据时演示曲线）
+- 最新告警表格（等级 Tag 分色，中文标签）
 
-### 6.5 预测中心 (PredictionPage.tsx)
-- **左侧配置面板**：
-  - 设备选择下拉
-  - 4 种算法开关 (Switch) + 权重滑块 (Slider)
-  - 高/中风险阈值滑块
-  - **可折叠"算法参数配置"面板**（Collapse 组件）：
-    - 每个启用的算法展示其内部参数（InputNumber 编辑）
-    - rule_based：告警权重、基础 RUL、每告警衰减 RUL、噪声范围、置信度范围
-    - statistical / ml / deep_learning：风险分均值/标准差、RUL 均值/标准差、置信度范围
-    - 每个参数带中文标签和合理的 min/max/step 限制
-    - "恢复默认"按钮重置为出厂默认值
-  - "运行预测"按钮（将 algo_params 一同发送给后端）
-- **右侧结果面板**：
-  - 风险分 / RUL / 置信度大数字展示
-  - 风险等级 Tag（中文标签：低/中/高/危急）+ 建议措施
-  - 各算法详情行
-  - 算法贡献饼图 (ECharts)
-  - 风险趋势折线图（最近 10 次 + 阈值标线）
-- 每次预测自动提交评估记录到 `/algo-governance/evaluations`
-- **配置状态通过 props 与 App.tsx 共享**，治理页可读取当前配置
+### 6.5 设备管理页 (DeviceManagementPage.tsx)
+- 可搜索/过滤的设备表格（状态、名称、类型、型号、厂家、位置）
+- 点击设备名跳转到 `/devices/:id` 详情页
+- 新建/编辑 Modal（含型号/厂家/年份/序列号/描述/数据源标签等全字段）
+- 删除操作 Popconfirm 确认
 
-### 6.6 规则中心 (RulesPage.tsx)
-- 规则列表表格（名称、设备类型、指标、条件、等级、启停 Switch、时间）
-- "新建规则"弹窗 Modal（带完整字段校验）
-- 启停切换调用 `POST /rules/{id}/toggle`
+### 6.6 设备详情页 (DeviceDetailPage.tsx)
+- `useParams()` 获取 id，返回按钮回到列表
+- **5 个 Tab**：
+  1. **基本信息** — Descriptions 展示全部台账字段 + 内联编辑
+  2. **维保记录** — 维保表格（类型/日期/操作人/费用）+ 新建/删除
+  3. **告警历史** — 该设备告警列表（等级/消息/时间）
+  4. **预测历史** — 该设备预测记录 + 风险趋势折线图
+  5. **运行数据** — ECharts 四指标曲线（温度/振动/压力/RPM）+ 数据量选择 + 刷新
 
-### 6.7 算法治理 (GovernancePage.tsx)
-- 三个 Tab 页：
-  1. **模板管理**：
-     - "保存当前配置为模板"按钮（**使用预测中心当前实际配置，包括 algo_params**，非硬编码默认值）
-     - 导出 JSON（包含 algo_params 字段）、导入 JSON (Upload)
-     - **套用按钮：真正加载模板配置到预测中心并跳转**（通过 App.tsx 共享状态传递）
-     - 删除 (Popconfirm)
-     - **模板表格支持展开行查看各算法参数详情**
-  2. **评估记录**：设备ID、预测ID、命中率、误报率、备注、时间
-  3. **审计日志**：操作类型(Tag)、目标类型、用户、详情、时间
-- 接收 `currentConfig` 和 `onApplyTemplate` props 与 App.tsx 联动
+### 6.7 预测中心 (PredictionPage.tsx)
+- 左侧：设备选择、算法开关 + 权重 Slider、风险阈值 Slider、可折叠算法参数配置面板
+- 右侧：风险分/RUL/置信度大数字、风险等级 Tag + 建议、算法贡献饼图、风险趋势折线图
+- 每次预测自动提交治理评估记录
 
-### 6.8 通知中心 (NotificationsPage.tsx)
-- 事件列表表格：标题、等级（中文标签）、状态（待发送/成功/失败）、重试次数、目标地址、错误信息、时间
-- "重试失败事件"按钮（failedCount 为 0 时禁用）
+### 6.8 规则中心 (RulesPage.tsx)
+- 规则列表（名称/设备类型/指标/条件/等级/启停）
+- 新建规则 Modal + 启停切换
 
-### 6.9 数据源配置 (DataSourcePage.tsx)
-- 数据源列表表格（状态图标、名称、连接信息、用户、启用、更新时间、操作）
-- 新建/编辑 Modal：名称、类型(TDengine/MySQL/PostgreSQL/InfluxDB)、主机、端口、用户名、密码、数据库、启用开关
-- Modal 内"测试连接"按钮
-- 测试结果弹窗（成功/失败图标 + 延迟 ms）
+### 6.9 算法治理 (GovernancePage.tsx)
+- 3 个 Tab：模板管理（含套用/导入/导出/展开参数详情）、评估记录、审计日志
+- 模板保存使用当前预测页实际配置（通过 App.tsx 共享状态）
 
-### 6.10 快捷导航 (CommandPalette.tsx)
-- `Ctrl+K` 全局快捷键呼出
-- 搜索输入框 + 路由项列表（键盘上下选择 + 回车导航）
-- ESC 关闭
+### 6.10 通知中心 (NotificationsPage.tsx)
+- 事件表格（等级/状态/重试次数/目标地址/错误）
+- 重试失败事件按钮
 
-### 6.11 主题系统 (ThemeContext.tsx)
-- 亮/暗双主题，默认暗色
+### 6.11 数据源配置 (DataSourcePage.tsx)
+- 数据源列表 + 新建/编辑 Modal + 测试连接
+
+### 6.12 系统管理页 (SystemManagementPage.tsx)
+- **系统概览** — 版本号、构建日期、服务器实时时钟、后端地址
+- **时序数据库** — TDengine host/port/database/连接状态
+- **通知配置** — Webhook URL、最大重试次数（admin 可编辑保存）
+
+### 6.13 快捷导航 (CommandPalette.tsx)
+- `Ctrl+K` 呼出，搜索 + 键盘导航 + 回车跳转 + ESC 关闭
+
+### 6.14 主题系统 (ThemeContext.tsx)
+- 亮/暗双主题，默认暗色，`localStorage` 持久化
 - Ant Design `ConfigProvider` + `darkAlgorithm` / `defaultAlgorithm`
-- 自定义 token（`colorPrimary`, `colorBgContainer`, `colorBorder` 等）
-- `localStorage` 持久化主题偏好
-- `data-theme` 属性挂载到 HTML 根元素
+- `data-theme` 挂载到 HTML 根元素供 CSS 变量切换
 
-### 6.12 API 层 (api.ts)
-- axios 实例，baseURL 从 `VITE_API_BASE` 环境变量读取
-- 请求拦截器：自动注入 `Bearer {token}`
-- 响应拦截器：401 时清除 token 并跳转登录
-
-### 6.13 统一标签体系 (types/index.ts)
-- **AlgorithmParams** 接口：四种算法各自的参数字典类型
-- **PredictionConfig** 接口：完整预测配置（algorithms, weights, thresholds, algoParams），用于跨页面状态共享
-- **AlgoTemplate** 接口：含 `algo_params` 字段，支持模板保存/导入导出完整参数
-- **设备状态**：`DEVICE_STATUS_LABEL` — online=在线, offline=离线, warning=告警, error=故障
-- **告警等级**：`ALERT_LEVEL_LABEL` — low=低, medium=中, high=高, critical=危急
-- **通知状态**：`NOTIF_STATUS_LABEL` — pending=待发送, success=成功, failed=失败
-- **颜色映射**：`LEVEL_COLOR` — 与告警等级对应的统一色值（绿/黄/橙/红）
-- 所有页面（App.tsx、DashboardPage、PredictionPage、NotificationsPage）从此常量集中引用，确保全局统一
+### 6.15 API 层 (api.ts)
+- axios 实例，baseURL 从 `VITE_API_BASE` 读取
+- 请求拦截器：自动注入 Bearer token；响应拦截器：401 清 token 跳转登录
 
 ---
 
 ## 七、样式与视觉规范 (styles.css)
 
 ### 7.1 CSS 变量体系
-- 两套完整配色：dark（默认）和 light
-- 变量覆盖：`--bg-primary`, `--bg-card`, `--border-color`, `--text-primary`, `--accent-*`, `--shadow-*`, `--chart-*` 等 30+ 个变量
+- 两套完整配色：dark（默认）和 light，30+ 个 CSS 变量
+- Logo 淡发光动画（`logo-pulse`，低强度，不过度）
 
 ### 7.2 视觉特征
-- **背景**：多层径向渐变光斑（蓝/青/紫），非纯平色
+- **背景**：多层径向渐变光斑（蓝/青/紫）
 - **卡片**：12px 圆角、hover 上浮 2px、边框微发光
-- **KPI 卡片**：顶部 3px 渐变色条（success/warning/danger 语义色）
-- **登录页**：毛玻璃效果登录卡片、渐变背景
+- **KPI 卡片**：顶部 3px 渐变色条（success/warning/danger）
+- **登录页**：粒子动效浮动背景 + 各元素错开渐入上升动画 + 颜色差异化特性图标
 - **状态点**：ok 绿色发光 / error 红色发光
-- **滚动条**：自定义窄滚动条
 - **页面切换**：opacity + translateY 过渡动画
-
-### 7.3 响应式断点
-- `≤1100px`：登录卡片缩小
-- `≤760px`：登录卡片全宽、状态栏缩小、KPI 卡片竖排、侧边栏变抽屉
-
-### 7.4 Ant Design 深度覆盖
-- 覆盖了 Layout、Sider、Menu、Card、Table、Modal、Input、Select、Drawer、Tag、Switch、Slider、Popover、Tooltip、Badge、Pagination、Tabs 等组件的背景色/文字色/边框色，确保在暗色主题下可读
 
 ---
 
@@ -483,6 +515,8 @@ httpx==0.28.*
 apscheduler==3.*
 ```
 
+注：SQLite 使用 Python 标准库 `sqlite3`，不需要额外依赖。
+
 ---
 
 ## 九、前端依赖 (package.json)
@@ -499,13 +533,6 @@ apscheduler==3.*
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.1"
   }
 }
 ```
@@ -534,17 +561,22 @@ DEFAULT_WEBHOOK_URL=http://localhost:9999/webhook
 | 1 | `passlib` + `bcrypt≥5` 不兼容 | 不用 passlib，直接 `import bcrypt` |
 | 2 | TDengine 健康检查 URL | 必须用 `/rest/login/root/taosdata`，不能用 `/rest/login`（404） |
 | 3 | 前端路由与 Nginx | 使用 `HashRouter`，Nginx 配 `try_files $uri $uri/ /index.html` |
-| 4 | Vite 开发代理 | `/api` → `http://localhost:8000`，生产环境用 `VITE_API_BASE` 直连 |
-| 5 | 预测权重归一化 | 前端滑块值 0-100，发送前除以总和归一化，避免 NaN |
-| 6 | TDengine 子表命名 | `t_{device_id}`，设备 ID 需去除单引号防注入 |
+| 4 | Vite 开发代理 | `/api` → `http://localhost:8000`，生产用 `VITE_API_BASE` 直连 |
+| 5 | 预测权重归一化 | 前端 Slider 值 0-100，发送前除以总和归一化 |
+| 6 | TDengine 子表命名 | `t_{device_id}`，设备 ID 清理特殊字符防注入 |
 | 7 | Docker build 前端 | `VITE_API_BASE=http://localhost:8000` 写在 Dockerfile ENV 中 |
-| 8 | 数据源种子 host 不能硬编码 `localhost` | Docker 容器间网络用服务名 `tdengine`，须用 `settings.TDENGINE_HOST` 动态读取 |
-| 9 | `/health` 与数据源页面状态不一致 | 启动 lifespan 中主动探测 TDengine 并同步数据源记录状态 |
-| 10 | 前端状态标签英文不友好 | 统一在 `types/index.ts` 中定义中文标签常量，所有页面引用 |
-| 11 | Docker build 上下文过大 | 必须创建 `.dockerignore` 排除 `node_modules`、`__pycache__`、`.git` 等 |
-| 12 | 治理页模板"套用"按钮无实际效果 | 通过 App.tsx 共享 `predictionConfig` 状态，套用时转换参数并跳转预测页 |
-| 13 | 治理页新建模板总是写死默认值 | GovernancePage 接收 `currentConfig` props，保存模板时使用当前实际配置 |
-| 14 | Dashboard KPI 平均风险分硬编码 0.35 | 新增 `GET /predictions/stats` 端点，前端动态获取 |
+| 8 | 数据源种子 host 不能硬编码 `localhost` | Docker 容器间用服务名 `tdengine`，须用 `settings.TDENGINE_HOST` 动态读取 |
+| 9 | `/health` 与数据源页面状态一致性 | 启动 lifespan 中主动探测 TDengine 并同步数据源 status 字段 |
+| 10 | 前端标签英文 | 统一在 `types/index.ts` 中定义中文标签常量，所有页面引用 |
+| 11 | Docker build 上下文过大 | 必须创建 `.dockerignore` 排除 `node_modules`、`__pycache__`、`.git` |
+| 12 | 治理页模板套用无实际效果 | 通过 App.tsx 共享 `predictionConfig`，套用时转换参数并跳转 |
+| 13 | 治理页模板保存写死默认值 | GovernancePage 接收 `currentConfig` props，使用当前实际配置 |
+| 14 | Dashboard KPI 硬编码 | 新增 `GET /predictions/stats`，单 SQL 返回 count + avg |
+| 15 | SQLite `condition` 是关键字 | `rules` 表列名用 `condition_expr`，读取时 `_rule_row()` 重命名 |
+| 16 | SQLite `database` 是关键字 | `datasources` 表列名用 `database_name`，辅助函数双向映射 |
+| 17 | SQLite 并发写 | `tx()` 每次新建连接 + WAL 模式，避免多协程共享连接问题 |
+| 18 | SQLite volume 丢失 | `docker compose down -v` 会删除 volume，重置数据；正常重启用 `docker compose restart` |
+| 19 | 术语"遥测"不适合工业 PdM | UI 文本全部改为"运行数据/运行趋势"；API 路由 `/telemetry` 作为内部标识保持不变 |
 
 ---
 
@@ -572,76 +604,66 @@ docker compose logs -f
 # 4. 访问
 # 前端: http://localhost:5173
 # 后端 Swagger: http://localhost:8000/docs
-# TDengine REST: http://localhost:6041
+
+# 重置数据（清空并重播种）
+docker compose down -v && docker compose up -d
 ```
 
 ---
 
 ## 十四、复刻执行建议（给其他 AI 的指令）
 
-如果使用其他 AI Agent 从零复刻此项目，建议按以下顺序执行：
+按以下顺序执行：
 
-1. **后端骨架**：创建 FastAPI 项目结构、配置、安全模块
-2. **数据模型**：定义所有 Pydantic 模型（**含 AlgorithmParams 算法参数模型**）和内存 store（数据源种子须从 settings 读取 host/port）
-3. **认证路由**：实现登录 + JWT + RBAC 依赖
-4. **业务路由**：devices → alerts → rules → predictions（**含 algo_params 字段传递 + /stats 端点**） → governance
-5. **预测服务**：四个算法函数接收 params dict 参数驱动 + 加权融合
-6. **TDengine 服务**：init_database + ingest + query
-6. **通知服务**：HMAC 签名 + 重试机制
-7. **数据源路由**：CRUD + 连接测试
-8. **健康检查**：GET /health
-9. **启动自检**：lifespan 中探测 TDengine 并同步数据源状态
-10. **Docker 配置**：后端 Dockerfile + .dockerignore + docker-compose.yml
-11. **前端骨架**：Vite + React + TypeScript + router 配置
-12. **API 层**：axios 实例 + 拦截器
-13. **类型定义**：TypeScript interface（对齐后端模型，**含 AlgorithmParams、PredictionConfig**）+ 统一中文标签常量
-14. **主题系统**：ThemeContext + styles.css (暗/亮双主题)
-15. **主框架 Shell**：Sider + Header + StatusBar + Footer + Drawers + **共享 predictionConfig 状态**
-16. **6 个路由页面**：逐一实现（所有状态/等级标签引用统一常量，**预测页含 algo_params 面板**，**治理页模板套用联动**，**Dashboard KPI 动态获取**）
-17. **快捷导航**：CommandPalette 组件
-18. **前端 Docker**：多阶段构建 + .dockerignore + Nginx
-19. **联调测试**：`docker compose up --build` 验收
+1. **后端骨架**：FastAPI 项目结构、配置、安全模块
+2. **数据库层**：`database.py`（SQLite DDL + `tx()` 管理器，12 张表，WAL 模式）
+3. **数据模型**：Pydantic 模型（含 AlgorithmParams、DeviceUpdate、MaintenanceRecord、SystemInfo）
+4. **CRUD 层**：`store.py`（全部 SQLite CRUD 函数 + seed()）
+5. **认证路由**：登录 + JWT + RBAC
+6. **业务路由**：devices（含 10 个端点）→ alerts → rules → predictions → governance → system
+7. **算法服务**：4 个算法函数，接收真实 telemetry 数据，可配置参数
+8. **TDengine 服务**：init_database + ingest + query_telemetry
+9. **通知服务**：HMAC 签名 + 重试 + SQLite 状态跟踪
+10. **main.py lifespan**：建表 → 播种 → TDengine 初始化 → 健康探测 → 数据源同步
+11. **Docker 配置**：backend Dockerfile + pdm_data volume
+12. **前端骨架**：Vite + React + TypeScript + HashRouter
+13. **类型定义**：TypeScript interface（对齐后端模型）+ 中文标签常量
+14. **主题系统**：ThemeContext + styles.css（亮/暗）
+15. **主框架 Shell**：Sider + Header + 共享 predictionConfig 状态
+16. **10 个路由页面**：Dashboard → DeviceManagement → DeviceDetail → Prediction → Rules → Governance → Notifications → DataSource → System（Login 最后）
+17. **前端 Docker**：多阶段构建 + Nginx
+18. **联调测试**：`docker compose up --build` 验收
 
 ---
 
 ## 十五、验收标准
 
 ### 功能验收
-- [ ] 登录后可进入 6 个路由页面并正常切换
+- [ ] 登录后可进入 9 个路由页面并正常切换
+- [ ] 设备管理页显示 6 台完整台账信息，可新建/编辑/删除
+- [ ] 设备详情页 5 个 Tab 均正常加载（基本信息/维保/告警/预测/运行数据）
+- [ ] 维保记录可新增/删除
 - [ ] 预测链路跑通（配置 → 运行 → 结果 → 图表 → 评估记录更新）
-- [ ] **预测中心展开"算法参数配置"面板，修改参数后预测结果受影响**
-- [ ] **"恢复默认"按钮正确重置所有算法参数**
-- [ ] 规则 CRUD + 启停切换正常
-- [ ] **模板"保存当前配置为模板"使用当前预测页的实际配置（含 algo_params）**
-- [ ] **模板"套用"后自动跳转预测中心并加载完整配置**
-- [ ] **模板表格展开行可查看各算法参数详情**
-- [ ] 模板导出 JSON 包含 algo_params 字段，导入后可用
-- [ ] **Dashboard "平均风险分"和"最近预测"在运行预测后动态更新（非占位符）**
-- [ ] 通知页与顶部通知中心数据一致
-- [ ] 设备/告警/通知抽屉可展开查看明细
-- [ ] 数据源连接测试可用
-- [ ] `Ctrl+K` 快捷导航正常
+- [ ] 预测中心展开"算法参数配置"面板，修改参数后预测结果受影响
+- [ ] 模板保存使用当前预测页实际配置（含 algo_params）
+- [ ] 模板套用后自动跳转预测中心并加载完整配置
+- [ ] Dashboard"平均风险分"和"最近预测"在预测后动态更新
+- [ ] 系统管理页显示版本信息和 TDengine 状态，通知 Webhook 可编辑
+
+### 持久化验收
+- [ ] `docker restart pdm-backend` 后登录仍成功
+- [ ] 重启后设备列表、预测记录、告警、维保记录均保留
+- [ ] `docker compose down && docker compose up -d`（不加 `-v`）数据保留
+- [ ] 加 `-v` 清空后自动重播种，6 台设备 + 15 条维保记录出现
 
 ### 状态一致性验收
 - [ ] `GET /health` 返回 `{ service: "ok", tdengine: "ok" }`
-- [ ] 数据源页面 TDengine 状态与 `/health` 端点一致（均为 ok / 均为 error）
-- [ ] 状态栏平台服务与 TDengine 均使用"正常/异常"用词
-- [ ] 页脚运行状态同时检查 service 和 tdengine 双状态
-- [ ] 设备抽屉显示中文状态（在线/离线/告警/故障）
-- [ ] 告警抽屉 & 仪表盘告警表格显示中文等级（低/中/高/危急）
-- [ ] 通知抽屉 & 通知页面显示中文状态（待发送/成功/失败）
-- [ ] 预测中心风险等级显示中文标签
+- [ ] 数据源页面与 /health 端点状态一致
+- [ ] 状态栏、页脚、系统管理页 TDengine 状态用词一致（正常/异常）
 
 ### 工程验收
 - [ ] `npm run build` 成功
 - [ ] `docker compose up --build` 三服务均正常启动
-- [ ] `GET /health` 返回 `{ service: "ok", tdengine: "ok" }`
-
-### UI 验收
-- [ ] 暗色主题下所有文字、表格、弹窗、下拉框均可读
-- [ ] 亮色主题切换正常
-- [ ] 图表标签不重叠
-- [ ] 移动端（≤760px）导航和布局可用
 
 ---
 
@@ -649,9 +671,9 @@ docker compose logs -f
 
 | 项目 | 值 |
 |------|-----|
-| **Agent 入口** | VS Code Copilot Chat（Agent 模式） |
-| **底层模型** | Claude Opus 4.6 (Anthropic) |
-| **调用方式** | GitHub Copilot 代理，在 VS Code 中对话式开发 |
-| **工作能力** | 文件创建/编辑、终端命令执行、语义搜索、多文件并行读取、错误诊断 |
-| **对话轮次** | 多轮迭代（骨架搭建 → 逐模块实现 → Bug 修复 → 视觉优化） |
-| **总文件数** | ~35 个源文件 |
+| **Agent 入口** | Claude Code（VS Code 集成） |
+| **底层模型** | Claude Sonnet 4.6 / Claude Opus 4.6（Anthropic） |
+| **工作方式** | 多轮对话式开发，直接操作文件系统与终端 |
+| **工作能力** | 文件创建/编辑、终端命令执行、语义搜索、多文件并行读取、错误诊断、数据库迁移 |
+| **总源文件数** | ~42 个源文件 |
+| **主要迭代** | 骨架搭建 → 逐模块实现 → 算法真实数据驱动 → SQLite 持久化迁移 → 设备台账扩展 → UI 美化 |
