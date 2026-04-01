@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  tdengine:
+    image: tdengine/tdengine:3.3.4.3
+    container_name: pdm-tdengine
+    ports:
+      - "6030:6030"
+      - "6041:6041"
+    volumes:
+      - tdengine_data:/var/lib/taos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6041/rest/login/root/taosdata"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pdm-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - TDENGINE_HOST=tdengine
+    volumes:
+      - pdm_data:/app/data
+    depends_on:
+      tdengine:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pdm-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  tdengine_data:
+  pdm_data:
