@@ -3,18 +3,24 @@ import {
   Card, Table, Button, Modal, Form, Input, Select, Tag, Switch, message,
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
+import axios from 'axios';
 import api from '../api';
-import type { Rule } from '../types';
+import type { AlertLevel, Rule } from '../types';
+import { LEVEL_COLOR } from '../types';
 
-const levelColor: Record<string, string> = {
-  low: '#22c55e', medium: '#eab308', high: '#f97316', critical: '#ef4444',
-};
+interface CreateRuleValues {
+  name: string;
+  device_type: string;
+  metric: string;
+  condition: string;
+  level: AlertLevel;
+}
 
 export default function RulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<CreateRuleValues>();
 
   const fetchRules = async () => {
     setLoading(true);
@@ -30,15 +36,19 @@ export default function RulesPage() {
 
   useEffect(() => { fetchRules(); }, []);
 
-  const handleCreate = async (values: any) => {
+  const handleCreate = async (values: CreateRuleValues) => {
     try {
       await api.post('/rules', values);
       message.success('规则创建成功');
       setModalOpen(false);
       form.resetFields();
       fetchRules();
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '创建失败');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        message.error(err.response?.data?.detail || '创建失败');
+        return;
+      }
+      message.error('创建失败：系统错误');
     }
   };
 
@@ -67,7 +77,7 @@ export default function RulesPage() {
       dataIndex: 'level',
       key: 'level',
       width: 100,
-      render: (level: string) => <Tag color={levelColor[level]}>{level.toUpperCase()}</Tag>,
+      render: (level: AlertLevel) => <Tag color={LEVEL_COLOR[level]}>{level.toUpperCase()}</Tag>,
     },
     {
       title: '状态',
@@ -117,7 +127,7 @@ export default function RulesPage() {
         okText="创建"
         cancelText="取消"
       >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
+        <Form<CreateRuleValues> form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item name="name" label="规则名称" rules={[{ required: true, message: '请输入规则名称' }]}>
             <Input placeholder="例：温度过高告警" />
           </Form.Item>
