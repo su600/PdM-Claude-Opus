@@ -77,7 +77,7 @@ by Claude Opus 4.6
 | --- | --- |
 | ![首页-亮色](docs/screenshots/dashboard-light.png) | ![首页-暗色](docs/screenshots/dashboard-dark.png) |
 
-#### 关键信息页面（系统管理）
+#### 系统管理
 
 | 亮色主题 | 暗色主题 |
 | --- | --- |
