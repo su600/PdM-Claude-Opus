@@ -286,7 +286,7 @@ export default function PredictionPage({ devices, config, onConfigChange }: Prop
         message.error(err.response?.data?.detail || '预测失败');
         return;
       }
-      message.error('预测失败');
+      message.error('预测失败：系统错误');
     } finally {
       setLoading(false);
     }

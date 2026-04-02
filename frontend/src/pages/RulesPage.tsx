@@ -11,6 +11,14 @@ const levelColor: Record<string, string> = {
   low: '#22c55e', medium: '#eab308', high: '#f97316', critical: '#ef4444',
 };
 
+interface CreateRuleValues {
+  name: string;
+  device_type: string;
+  metric: string;
+  condition: string;
+  level: AlertLevel;
+}
+
 export default function RulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,14 +39,6 @@ export default function RulesPage() {
 
   useEffect(() => { fetchRules(); }, []);
 
-  interface CreateRuleValues {
-    name: string;
-    device_type: string;
-    metric: string;
-    condition: string;
-    level: AlertLevel;
-  }
-
   const handleCreate = async (values: CreateRuleValues) => {
     try {
       await api.post('/rules', values);
@@ -51,7 +51,7 @@ export default function RulesPage() {
         message.error(err.response?.data?.detail || '创建失败');
         return;
       }
-      message.error('创建失败');
+      message.error('创建失败：系统错误');
     }
   };
 
