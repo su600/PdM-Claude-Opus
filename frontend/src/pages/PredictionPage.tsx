@@ -5,6 +5,7 @@ import {
 } from 'antd';
 import { ExperimentOutlined, ThunderboltOutlined, SettingOutlined, UndoOutlined, CodeOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
+import axios from 'axios';
 import api from '../api';
 import type { Device, PredictionResult, AlgorithmOutput, PredictionConfig, AlgorithmParams } from '../types';
 import { LEVEL_COLOR, ALERT_LEVEL_LABEL } from '../types';
@@ -280,8 +281,12 @@ export default function PredictionPage({ devices, config, onConfigChange }: Prop
       } catch {}
 
       message.success('预测完成');
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || '预测失败');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        message.error(err.response?.data?.detail || '预测失败');
+        return;
+      }
+      message.error('预测失败');
     } finally {
       setLoading(false);
     }
