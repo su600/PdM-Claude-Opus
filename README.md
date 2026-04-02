@@ -63,6 +63,26 @@ by Claude Opus 4.6
 - 深色企业主题与移动端自适应，亮色主题可切换
 - 预测页可折叠"算法参数配置"面板，支持恢复默认
 
+### 页面截图（亮/暗主题）
+
+#### 登录页面
+
+| 亮色主题 | 暗色主题 |
+| --- | --- |
+| ![登录页-亮色](docs/screenshots/login-light.png) | ![登录页-暗色](docs/screenshots/login-dark.png) |
+
+#### 首页（运行总览）
+
+| 亮色主题 | 暗色主题 |
+| --- | --- |
+| ![首页-亮色](docs/screenshots/dashboard-light.png) | ![首页-暗色](docs/screenshots/dashboard-dark.png) |
+
+#### 关键信息页面（系统管理）
+
+| 亮色主题 | 暗色主题 |
+| --- | --- |
+| ![系统管理-亮色](docs/screenshots/system-light.png) | ![系统管理-暗色](docs/screenshots/system-dark.png) |
+
 ## 4. 目录结构
 
 ~~~text
