@@ -69,19 +69,19 @@ by Claude Opus 4.6
 
 | 亮色主题 | 暗色主题 |
 | --- | --- |
-| ![登录页-亮色](docs/screenshots/login-light.png) | ![登录页-暗色](docs/screenshots/login-dark.png) |
+| <a href="docs/screenshots/login-light.png"><img src="docs/screenshots/login-light.png" alt="登录页-亮色" width="400"></a> | <a href="docs/screenshots/login-dark.png"><img src="docs/screenshots/login-dark.png" alt="登录页-暗色" width="400"></a> |
 
 #### 首页（运行总览）
 
 | 亮色主题 | 暗色主题 |
 | --- | --- |
-| ![首页-亮色](docs/screenshots/dashboard-light.png) | ![首页-暗色](docs/screenshots/dashboard-dark.png) |
+| <a href="docs/screenshots/dashboard-light.png"><img src="docs/screenshots/dashboard-light.png" alt="首页-亮色" width="400"></a> | <a href="docs/screenshots/dashboard-dark.png"><img src="docs/screenshots/dashboard-dark.png" alt="首页-暗色" width="400"></a> |
 
 #### 系统管理
 
 | 亮色主题 | 暗色主题 |
 | --- | --- |
-| ![系统管理-亮色](docs/screenshots/system-light.png) | ![系统管理-暗色](docs/screenshots/system-dark.png) |
+| <a href="docs/screenshots/system-light.png"><img src="docs/screenshots/system-light.png" alt="系统管理-亮色" width="400"></a> | <a href="docs/screenshots/system-dark.png"><img src="docs/screenshots/system-dark.png" alt="系统管理-暗色" width="400"></a> |
 
 ## 4. 目录结构
 
