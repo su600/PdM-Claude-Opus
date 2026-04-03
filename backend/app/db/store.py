@@ -258,11 +258,11 @@ def get_all_evaluations() -> list[dict]:
 def create_evaluation(data: dict) -> dict:
     with tx() as c:
         c.execute(
-            "INSERT INTO evaluations(id,device_id,algorithm,risk_score,rul_hours,"
-            "confidence,notes,created_at) VALUES(?,?,?,?,?,?,?,?)",
-            (data["id"], data["device_id"], data.get("algorithm"),
-             data.get("risk_score"), data.get("rul_hours"),
-             data.get("confidence"), data.get("notes"), data["created_at"]),
+            "INSERT INTO evaluations(id,device_id,prediction_id,hit_rate,"
+            "false_alarm_rate,notes,created_at) VALUES(?,?,?,?,?,?,?)",
+            (data["id"], data["device_id"], data.get("prediction_id"),
+             data.get("hit_rate"), data.get("false_alarm_rate"),
+             data.get("notes"), data["created_at"]),
         )
     return data
 
@@ -271,8 +271,11 @@ def create_evaluation(data: dict) -> dict:
 
 def get_all_audit_logs() -> list[dict]:
     with tx() as c:
-        return _rows(c.execute(
+        rows = _rows(c.execute(
             "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500").fetchall())
+        for r in rows:
+            r["user"] = r.pop("username", "")
+        return rows
 
 def append_audit_log(data: dict) -> None:
     username = data.get("user") or data.get("username", "")

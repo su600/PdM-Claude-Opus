@@ -74,14 +74,13 @@ CREATE TABLE IF NOT EXISTS templates (
     updated_at  TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS evaluations (
-    id         TEXT PRIMARY KEY,
-    device_id  TEXT NOT NULL,
-    algorithm  TEXT,
-    risk_score REAL,
-    rul_hours  REAL,
-    confidence REAL,
-    notes      TEXT,
-    created_at TEXT NOT NULL
+    id               TEXT PRIMARY KEY,
+    device_id        TEXT NOT NULL,
+    prediction_id    TEXT,
+    hit_rate         REAL,
+    false_alarm_rate REAL,
+    notes            TEXT,
+    created_at       TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS audit_logs (
     id          TEXT PRIMARY KEY,
@@ -156,3 +155,18 @@ def create_tables() -> None:
     """Create all tables (idempotent)."""
     with tx() as conn:
         conn.executescript(_DDL)
+        # Migrate evaluations table: old schema had algorithm/risk_score columns
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(evaluations)").fetchall()}
+        if "algorithm" in cols or "hit_rate" not in cols:
+            conn.executescript(
+                "DROP TABLE IF EXISTS evaluations;"
+                "CREATE TABLE evaluations ("
+                "    id               TEXT PRIMARY KEY,"
+                "    device_id        TEXT NOT NULL,"
+                "    prediction_id    TEXT,"
+                "    hit_rate         REAL,"
+                "    false_alarm_rate REAL,"
+                "    notes            TEXT,"
+                "    created_at       TEXT NOT NULL"
+                ");"
+            )
