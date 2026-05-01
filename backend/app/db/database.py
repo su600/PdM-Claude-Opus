@@ -117,14 +117,15 @@ CREATE TABLE IF NOT EXISTS datasources (
     updated_at     TEXT
 );
 CREATE TABLE IF NOT EXISTS maintenance_records (
-    id               TEXT PRIMARY KEY,
-    device_id        TEXT NOT NULL,
-    date             TEXT NOT NULL,
-    maintenance_type TEXT NOT NULL,
-    description      TEXT,
-    operator         TEXT,
-    cost             REAL,
-    created_at       TEXT NOT NULL
+    id                    TEXT PRIMARY KEY,
+    device_id             TEXT NOT NULL,
+    date                  TEXT NOT NULL,
+    maintenance_type      TEXT NOT NULL,
+    description           TEXT,
+    operator              TEXT,
+    cost                  REAL,
+    next_maintenance_date TEXT,
+    created_at            TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS system_settings (
     key   TEXT PRIMARY KEY,
@@ -170,3 +171,8 @@ def create_tables() -> None:
                 "    created_at       TEXT NOT NULL"
                 ");"
             )
+        # Migrate maintenance_records: add next_maintenance_date if missing
+        mr_cols = {row[1] for row in conn.execute("PRAGMA table_info(maintenance_records)").fetchall()}
+        if "next_maintenance_date" not in mr_cols:
+            conn.execute("ALTER TABLE maintenance_records ADD COLUMN next_maintenance_date TEXT")
+            conn.commit()

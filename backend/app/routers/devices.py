@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.db import store
 from app.db.models import (
     DeviceCreate, DeviceOut, DeviceUpdate,
-    MaintenanceRecordCreate, MaintenanceRecordOut,
+    MaintenanceRecordCreate, MaintenanceRecordOut, InspectionOverviewItem,
     AlertOut, PredictionResult,
 )
 from app.routers.auth import get_current_user
@@ -97,6 +97,7 @@ def create_maintenance(device_id: str, body: MaintenanceRecordCreate,
         "description": body.description,
         "operator": body.operator,
         "cost": body.cost,
+        "next_maintenance_date": body.next_maintenance_date,
         "created_at": _now(),
     })
     return MaintenanceRecordOut(**record)
@@ -123,3 +124,10 @@ def device_alerts(device_id: str, user: dict = Depends(get_current_user)):
 def device_predictions(device_id: str, user: dict = Depends(get_current_user)):
     _get_device(device_id)
     return [PredictionResult(**p) for p in store.get_predictions_for_device(device_id)]
+
+
+# ── Inspection Overview ───────────────────────────────────────────────────────
+
+@router.get("/inspection/overview", response_model=list[InspectionOverviewItem])
+def inspection_overview(user: dict = Depends(get_current_user)):
+    return [InspectionOverviewItem(**item) for item in store.get_inspection_overview()]
