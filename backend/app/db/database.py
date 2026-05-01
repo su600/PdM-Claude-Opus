@@ -175,3 +175,4 @@ def create_tables() -> None:
         mr_cols = {row[1] for row in conn.execute("PRAGMA table_info(maintenance_records)").fetchall()}
         if "next_maintenance_date" not in mr_cols:
             conn.execute("ALTER TABLE maintenance_records ADD COLUMN next_maintenance_date TEXT")
+            conn.commit()
