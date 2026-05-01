@@ -8,6 +8,7 @@ import {
   SettingOutlined, BellOutlined, LogoutOutlined, MenuOutlined,
   SearchOutlined, DesktopOutlined, WarningOutlined, ReloadOutlined,
   DatabaseOutlined, SunOutlined, MoonOutlined, ToolOutlined, ControlOutlined,
+  AuditOutlined,
 } from '@ant-design/icons';
 import api from './api';
 import type { User, Device, Alert, HealthStatus, NotificationEvent, PredictionConfig, AlgoTemplate } from './types';
@@ -22,6 +23,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import DataSourcePage from './pages/DataSourcePage';
 import DeviceManagementPage from './pages/DeviceManagementPage';
 import DeviceDetailPage from './pages/DeviceDetailPage';
+import InspectionPage from './pages/InspectionPage';
 import SystemManagementPage from './pages/SystemManagementPage';
 import CommandPalette, { type CommandItem } from './components/CommandPalette';
 
@@ -56,6 +58,10 @@ const APP_SECTIONS = [
   {
     key: '/devices', icon: <ToolOutlined />, label: '设备管理',
     description: '设备台账、维保记录和数据源关联',
+  },
+  {
+    key: '/inspection', icon: <AuditOutlined />, label: '点检管理',
+    description: '设备点检计划、维修时间与下次维保跟踪',
   },
   {
     key: '/system', icon: <ControlOutlined />, label: '系统管理',
@@ -432,6 +438,7 @@ function AppShell() {
               <Route path="/datasources" element={<DataSourcePage />} />
               <Route path="/devices" element={<DeviceManagementPage />} />
               <Route path="/devices/:id" element={<DeviceDetailPage />} />
+              <Route path="/inspection" element={<InspectionPage />} />
               <Route path="/system" element={<SystemManagementPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

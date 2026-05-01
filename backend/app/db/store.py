@@ -388,16 +388,67 @@ def create_maintenance_record(data: dict) -> dict:
     with tx() as c:
         c.execute(
             "INSERT INTO maintenance_records(id,device_id,date,maintenance_type,"
-            "description,operator,cost,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            "description,operator,cost,next_maintenance_date,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
             (data["id"], data["device_id"], data["date"], data["maintenance_type"],
-             data.get("description"), data.get("operator"), data.get("cost"), data["created_at"]),
+             data.get("description"), data.get("operator"), data.get("cost"),
+             data.get("next_maintenance_date"), data["created_at"]),
         )
-    return data
+    return get_maintenance_record(data["id"])
 
 def delete_maintenance_record(mid: str) -> bool:
     with tx() as c:
         cur = c.execute("DELETE FROM maintenance_records WHERE id=?", (mid,))
         return cur.rowcount > 0
+
+
+def get_inspection_overview() -> list[dict]:
+    """Return one row per device with the latest maintenance record info."""
+    from datetime import date as date_type
+    today = date_type.today().isoformat()
+    with tx() as c:
+        devices = _rows(c.execute(
+            "SELECT id, name, device_type, location, status FROM devices ORDER BY created_at"
+        ).fetchall())
+        result = []
+        for dev in devices:
+            # Get the latest maintenance record for this device
+            latest = _row(c.execute(
+                "SELECT date, maintenance_type, operator, next_maintenance_date "
+                "FROM maintenance_records WHERE device_id=? ORDER BY date DESC, created_at DESC LIMIT 1",
+                (dev["id"],),
+            ).fetchone())
+            next_date = latest["next_maintenance_date"] if latest else None
+            days_until: int | None = None
+            if next_date:
+                try:
+                    delta = (date_type.fromisoformat(next_date) - date_type.fromisoformat(today)).days
+                    days_until = delta
+                except ValueError:
+                    pass
+            if not latest:
+                status = "never"
+            elif next_date is None:
+                status = "ok"
+            elif days_until is not None and days_until < 0:
+                status = "overdue"
+            elif days_until is not None and days_until <= 7:
+                status = "upcoming"
+            else:
+                status = "ok"
+            result.append({
+                "device_id": dev["id"],
+                "device_name": dev["name"],
+                "device_type": dev["device_type"],
+                "location": dev["location"],
+                "device_status": dev["status"],
+                "last_maintenance_date": latest["date"] if latest else None,
+                "last_maintenance_type": latest["maintenance_type"] if latest else None,
+                "last_operator": latest["operator"] if latest else None,
+                "next_maintenance_date": next_date,
+                "days_until_next": days_until,
+                "inspection_status": status,
+            })
+    return result
 
 
 # ── System Settings ──────────────────────────────────────────────────────────

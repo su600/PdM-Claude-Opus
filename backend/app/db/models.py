@@ -313,6 +313,7 @@ class MaintenanceRecordCreate(BaseModel):
     description: str
     operator: str
     cost: float = 0.0
+    next_maintenance_date: Optional[str] = None
 
 
 class MaintenanceRecordOut(BaseModel):
@@ -323,7 +324,22 @@ class MaintenanceRecordOut(BaseModel):
     description: str
     operator: str
     cost: float
+    next_maintenance_date: Optional[str] = None
     created_at: str
+
+
+class InspectionOverviewItem(BaseModel):
+    device_id: str
+    device_name: str
+    device_type: str
+    location: str
+    device_status: str
+    last_maintenance_date: Optional[str] = None
+    last_maintenance_type: Optional[str] = None
+    last_operator: Optional[str] = None
+    next_maintenance_date: Optional[str] = None
+    days_until_next: Optional[int] = None
+    inspection_status: str  # ok / upcoming / overdue / never
 
 
 # ── System ────────────────────────────────────────────

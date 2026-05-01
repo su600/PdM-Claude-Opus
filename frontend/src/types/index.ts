@@ -191,6 +191,7 @@ export interface MaintenanceRecord {
   description: string;
   operator: string;
   cost: number;
+  next_maintenance_date?: string;
   created_at: string;
 }
 
@@ -200,6 +201,28 @@ export const MAINTENANCE_TYPE_LABEL: Record<string, string> = {
 
 export const MAINTENANCE_TYPE_COLOR: Record<string, string> = {
   preventive: '#3b82f6', corrective: '#ef4444', predictive: '#a855f7', inspection: '#22c55e',
+};
+
+export interface InspectionOverviewItem {
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  location: string;
+  device_status: string;
+  last_maintenance_date?: string;
+  last_maintenance_type?: string;
+  last_operator?: string;
+  next_maintenance_date?: string;
+  days_until_next?: number;
+  inspection_status: 'ok' | 'upcoming' | 'overdue' | 'never';
+}
+
+export const INSPECTION_STATUS_LABEL: Record<string, string> = {
+  ok: '正常', upcoming: '即将到期', overdue: '已逾期', never: '未记录',
+};
+
+export const INSPECTION_STATUS_COLOR: Record<string, string> = {
+  ok: 'green', upcoming: 'orange', overdue: 'red', never: 'default',
 };
 
 /* ── System ──────────────────────────────────────────── */

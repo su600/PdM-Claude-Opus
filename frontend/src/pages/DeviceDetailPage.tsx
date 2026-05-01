@@ -86,7 +86,14 @@ export default function DeviceDetailPage() {
   // ── Maintenance CRUD ──
   const saveMaint = async () => {
     const values = await maintForm.validateFields();
-    const payload = { ...values, device_id: id, date: values.date.format('YYYY-MM-DD') };
+    const payload = {
+      ...values,
+      device_id: id,
+      date: values.date.format('YYYY-MM-DD'),
+      next_maintenance_date: values.next_maintenance_date
+        ? values.next_maintenance_date.format('YYYY-MM-DD')
+        : null,
+    };
     try {
       await api.post(`/devices/${id}/maintenance`, payload);
       message.success('维保记录已添加');
@@ -164,6 +171,17 @@ export default function DeviceDetailPage() {
     {
       title: '费用', dataIndex: 'cost', key: 'cost', width: 100,
       render: (v: number) => `¥${v.toLocaleString()}`,
+    },
+    {
+      title: '下次维保日期', dataIndex: 'next_maintenance_date', key: 'next_maintenance_date', width: 130,
+      render: (v: string | undefined) => {
+        if (!v) return <span style={{ color: '#94a3b8' }}>-</span>;
+        const today = new Date();
+        const next = new Date(v);
+        const diffDays = Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const color = diffDays < 0 ? '#ef4444' : diffDays <= 7 ? '#f97316' : '#22c55e';
+        return <span style={{ color, fontWeight: 600 }}>{v}</span>;
+      },
     },
     {
       title: '操作', key: 'action', width: 60,
@@ -372,6 +390,9 @@ export default function DeviceDetailPage() {
               <InputNumber min={0} step={100} style={{ width: '100%' }} />
             </Form.Item>
           </Space>
+          <Form.Item name="next_maintenance_date" label="下次维保日期">
+            <DatePicker style={{ width: '100%' }} placeholder="选择下次维保计划日期（可选）" />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
